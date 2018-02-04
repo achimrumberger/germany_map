@@ -1,0 +1,79 @@
+---
+title: "PLZ und Einwohnerzahl In Deutschland"
+author: "Achim Rumberger"
+date: "14. Mai 2016"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+#rm(list=ls(all=TRUE))
+library(choroplethr)
+library(dplyr)
+library(ggplot2)
+library(rgdal)
+library(maptools)
+library(gpclib)
+library(readr)
+library(R6)
+```
+## Load the shape file into R
+### Convert the resulting "SpatialPolygonsDataFrame"" into a standard "data.frame""
+
+
+```{r, echo=FALSE}
+
+ger_plz <- readOGR(dsn = "geo/plz-gebiete.shp/", layer = "plz-gebiete")
+
+gpclibPermit()
+#convert the raw data to a data.frame as ggplot works on data.frames
+ger_plz@data$id <- rownames(ger_plz@data)
+ger_plz.point <- fortify(ger_plz, region="id")
+ger_plz.df <- inner_join(ger_plz.point,ger_plz@data, by="id")
+
+# variable name 'region' is needed for choroplethr
+ger_plz.df$region <- ger_plz.df$plz
+```
+## Load the stat data
+```{r}
+df <- read_csv("de_plz_einwohner.csv")
+```
+### See if the conversion was successful
+```{r}
+head(ger_plz.df)
+```
+### Plot the shapefile with ggplot2
+```{r, echo=FALSE}
+ggplot(ger_plz.df, aes(long, lat, group=group )) + geom_polygon()
+```
+## Merge the shapefile data with the csv data
+### subclass Ari's class
+```{r}
+GERPLZChoropleth <- R6Class("GERPLZChoropleth", 
+                        inherit = choroplethr:::Choropleth,
+                        public = list(
+                          initialize = function(user.df) {
+                            super$initialize(ger_plz.df, user.df)
+                          }
+                        )
+)
+```
+### Instantiate new class with the csv data
+```{r}
+#choropleth needs these two columnames - 'region' and 'value'
+colnames(df) = c("region", "value")
+c <- GERPLZChoropleth$new(df)
+```
+
+### Plot the graph
+```{r, echo=FALSE}
+c$ggplot_polygon = geom_polygon(aes(fill = value), color = NA)
+c$title = "Comparison of number of Inhabitants per Zipcode in Germany"
+c$legend= "Number of Inhabitants per Zipcode"
+c$set_num_colors(9)
+c$render()
+```
+
+## 
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
